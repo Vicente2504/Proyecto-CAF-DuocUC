@@ -1,0 +1,12 @@
+{
+    "name": "Ficha de Movimiento CAF",
+    "short_name": "CAF Movimiento",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#EFF2F0",
+    "theme_color": "#1B6E68",
+    "description": "Ficha de Movimiento Funcional CAF — Duoc UC Plaza Vespucio.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": []
+}

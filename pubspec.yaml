@@ -1,0 +1,25 @@
+name: caf_movimiento_flutter
+description: "Ficha de Movimiento Funcional CAF — Fase 1 en Flutter Web."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  # 3.24+ porque theme.dart usa CardThemeData (la versión "moderna" de
+  # CardTheme). Si instalas Flutter desde flutter.dev hoy, esto se cumple
+  # de sobra: la versión estable actual es mucho más nueva.
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.2
+  shared_preferences: ^2.2.3
+  supabase_flutter: ^2.17.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
