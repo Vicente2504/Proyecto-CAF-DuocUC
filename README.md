@@ -22,6 +22,9 @@ configura). Los estudiantes y evaluaciones todavía se guardan en el
 navegador (`shared_preferences`); migrarlos a Supabase es el siguiente
 paso.
 
+**Documentación del proyecto de título:** las evidencias de cada fase
+(grupales e individuales) están en la carpeta [`Fase 1/`](Fase%201/).
+
 Inicio rápido (con Flutter ya instalado):
 
 ```

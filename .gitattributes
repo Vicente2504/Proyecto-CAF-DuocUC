@@ -2,3 +2,8 @@
 *.png binary
 *.jpg binary
 *.ico binary
+*.docx binary
+*.DOCX binary
+*.xlsx binary
+*.pptx binary
+*.pdf binary
