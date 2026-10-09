@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/exercise.dart';
 import '../services/app_state.dart';
+import '../services/data/data_repository.dart';
 import '../services/date_format.dart';
 import '../services/recommendation.dart';
 import 'evaluation_form_dialog.dart';
@@ -17,40 +18,65 @@ class InstructorScreen extends StatelessWidget {
     final emailCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
+    var saving = false;
+    String? error;
+
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nuevo estudiante'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Nombre y apellido'),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingresa un nombre' : null,
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: emailCtrl,
-                decoration: const InputDecoration(labelText: 'Correo'),
-              ),
-            ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Nuevo estudiante'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Nombre y apellido'),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingresa un nombre' : null,
+                  autofocus: true,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: emailCtrl,
+                  decoration: const InputDecoration(labelText: 'Correo'),
+                ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(error!, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                  ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (!(formKey.currentState?.validate() ?? false)) return;
+                      setDialogState(() {
+                        saving = true;
+                        error = null;
+                      });
+                      try {
+                        await context.read<AppState>().addStudent(nameCtrl.text.trim(), emailCtrl.text.trim());
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } on DataFailure catch (e) {
+                        if (ctx.mounted) {
+                          setDialogState(() {
+                            saving = false;
+                            error = e.message;
+                          });
+                        }
+                      }
+                    },
+              child: Text(saving ? 'Guardando…' : 'Guardar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () {
-              if (!(formKey.currentState?.validate() ?? false)) return;
-              context.read<AppState>().addStudent(nameCtrl.text.trim(), emailCtrl.text.trim());
-              Navigator.pop(ctx);
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
       ),
     );
   }
@@ -81,6 +107,12 @@ class InstructorScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              IconButton(
+                tooltip: 'Actualizar lista',
+                onPressed: appState.retry,
+                icon: const Icon(Icons.refresh),
+              ),
+              const SizedBox(width: 4),
               OutlinedButton(
                 onPressed: () => _showAddStudentDialog(context),
                 child: const Text('+ Nuevo estudiante'),

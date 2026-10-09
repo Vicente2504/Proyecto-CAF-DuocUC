@@ -95,6 +95,13 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<List<AppUser>> listUsers() => _backend.listUsers();
+
+  /// Los cambios de rol se aplican al usuario afectado la próxima vez que
+  /// inicie sesión.
+  Future<AppUser> updateUserRole(String userId, UserRole role) =>
+      _backend.updateUserRole(userId, role);
+
   @override
   void dispose() {
     _subscription?.cancel();

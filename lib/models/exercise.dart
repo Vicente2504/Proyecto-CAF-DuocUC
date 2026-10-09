@@ -1,7 +1,8 @@
 /// Los 10 ejercicios que el instructor evalúa en cada ficha. Cada uno se
 /// califica de 0 a 3 según la técnica observada; los que salen débiles
 /// pasan al plan del estudiante con su prescripción (ver
-/// lib/services/recommendation.dart).
+/// lib/services/recommendation.dart). Si agregas o cambias un id, hazlo
+/// también en la tabla `exercises` (supabase/migrations/0002_students_evaluations.sql).
 class Exercise {
   final String id;
   final String name;

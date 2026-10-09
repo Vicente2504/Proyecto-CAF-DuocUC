@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -96,6 +98,57 @@ class SupabaseAuthBackend implements AuthBackend {
   @override
   Future<void> signOut() => _guard(() => _auth.signOut());
 
+  @override
+  Future<List<AppUser>> listUsers() {
+    return _guard(() => _profileQuery(() async {
+          final rows = await _client.from('profiles').select('id, email, full_name, role').order('full_name');
+          return rows.map(_userFromRow).toList();
+        }));
+  }
+
+  @override
+  Future<AppUser> updateUserRole(String userId, UserRole role) {
+    return _guard(() => _profileQuery(() async {
+          final row = await _client
+              .from('profiles')
+              .update({'role': role.dbValue})
+              .eq('id', userId)
+              .select('id, email, full_name, role')
+              .maybeSingle();
+          // Sin fila: las reglas RLS no le permiten editar ese perfil.
+          if (row == null) throw const AuthFailure('Solo un administrador puede cambiar roles.');
+          return _userFromRow(row);
+        }));
+  }
+
+  static AppUser _userFromRow(Map<String, dynamic> row) => AppUser(
+        id: row['id'] as String,
+        email: row['email'] as String,
+        fullName: (row['full_name'] as String?) ?? '',
+        role: UserRole.fromDb(row['role'] as String?),
+      );
+
+  /// Los errores de las reglas de la base (por ejemplo "Debe quedar al
+  /// menos un administrador") ya vienen en español: se muestran tal cual.
+  Future<T> _profileQuery<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on PostgrestException catch (e) {
+      // Con .maybeSingle() el error puede llegar con el JSON completo de
+      // PostgREST dentro de `message`.
+      var code = e.code;
+      var message = e.message;
+      try {
+        final inner = jsonDecode(e.message) as Map<String, dynamic>;
+        code = inner['code'] as String? ?? code;
+        message = inner['message'] as String? ?? message;
+      } catch (_) {}
+      if (code == 'P0001') throw AuthFailure('$message.');
+      if (code == '42501') throw const AuthFailure('Solo un administrador puede cambiar roles.');
+      throw AuthFailure('No se pudo actualizar el usuario ($message).');
+    }
+  }
+
   Future<AppUser> _loadProfile(User user) async {
     final row = await _client
         .from('profiles')
@@ -121,8 +174,14 @@ class SupabaseAuthBackend implements AuthBackend {
       return await action();
     } on AuthFailure {
       rethrow;
-    } on AuthRetryableFetchException {
-      throw const AuthFailure('No se pudo conectar con el servidor. Revisa tu conexión a internet.');
+    } on AuthRetryableFetchException catch (e) {
+      // Sin statusCode no hubo respuesta; con statusCode (5xx) el servidor
+      // respondió con un error, por ejemplo el trigger de registro que
+      // rechaza correos no institucionales.
+      if (e.statusCode == null) {
+        throw const AuthFailure('No se pudo conectar con el servidor. Revisa tu conexión a internet.');
+      }
+      throw AuthFailure(_translate(e));
     } on AuthWeakPasswordException {
       throw const AuthFailure('La contraseña es demasiado débil. Usa al menos 8 caracteres combinando letras y números.');
     } on AuthException catch (e) {
@@ -152,7 +211,7 @@ class SupabaseAuthBackend implements AuthBackend {
     if (code == 'same_password') {
       return 'La nueva contraseña debe ser distinta de la anterior.';
     }
-    if (msg.contains('database error saving new user')) {
+    if (msg.contains('database error saving new user') || msg.contains('dominio de correo no permitido')) {
       return 'No se pudo crear la cuenta. Verifica que uses tu correo institucional de Duoc UC.';
     }
     return 'No se pudo completar la operación (${e.message}).';

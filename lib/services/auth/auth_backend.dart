@@ -48,4 +48,11 @@ abstract class AuthBackend {
   Future<AppUser> updatePassword(String newPassword);
 
   Future<void> signOut();
+
+  /// Todos los usuarios con su rol. Solo para administradores.
+  Future<List<AppUser>> listUsers();
+
+  /// Cambia el rol de un usuario. Solo un administrador puede hacerlo y
+  /// siempre debe quedar al menos un administrador.
+  Future<AppUser> updateUserRole(String userId, UserRole role);
 }

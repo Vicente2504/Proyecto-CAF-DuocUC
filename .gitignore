@@ -20,3 +20,5 @@ desktop.ini
 # Credenciales locales (usar env.example.json como plantilla)
 env.json
 .env
+# Widget Preview related
+.widget_preview/

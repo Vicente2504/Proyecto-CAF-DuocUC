@@ -13,6 +13,8 @@ class DemoAuthBackend implements AuthBackend {
   static const demoPassword = 'caf12345';
   static const _sessionKey = 'caf_demo_session_v1';
   static const _usersKey = 'caf_demo_users_v1';
+  // Roles cambiados desde la sección Usuarios: {correo: rol}.
+  static const _rolesKey = 'caf_demo_roles_v1';
 
   static const demoAccounts = [
     AppUser(id: 'demo-admin', email: 'admin@duoc.cl', fullName: 'Administración CAF', role: UserRole.admin),
@@ -92,6 +94,45 @@ class DemoAuthBackend implements AuthBackend {
     await prefs.remove(_sessionKey);
   }
 
+  @override
+  Future<List<AppUser>> listUsers() async {
+    final prefs = await SharedPreferences.getInstance();
+    await _requireAdmin(prefs);
+    final users = (await _allUsers(prefs)).values.map((e) => e.user).toList()
+      ..sort((a, b) => a.displayName.compareTo(b.displayName));
+    return users;
+  }
+
+  @override
+  Future<AppUser> updateUserRole(String userId, UserRole role) async {
+    final prefs = await SharedPreferences.getInstance();
+    await _requireAdmin(prefs);
+    final users = (await _allUsers(prefs)).values.map((e) => e.user).toList();
+    final target = users.firstWhere((u) => u.id == userId,
+        orElse: () => throw const AuthFailure('El usuario ya no existe.'));
+    if (target.role == UserRole.admin &&
+        role != UserRole.admin &&
+        !users.any((u) => u.role == UserRole.admin && u.id != userId)) {
+      throw const AuthFailure('Debe quedar al menos un administrador.');
+    }
+    final roles = _roleOverrides(prefs)..[target.email] = role.dbValue;
+    await prefs.setString(_rolesKey, jsonEncode(roles));
+    return AppUser(id: target.id, email: target.email, fullName: target.fullName, role: role);
+  }
+
+  Future<void> _requireAdmin(SharedPreferences prefs) async {
+    final email = prefs.getString(_sessionKey);
+    final current = email == null ? null : (await _allUsers(prefs))[email]?.user;
+    if (current?.role != UserRole.admin) {
+      throw const AuthFailure('Solo un administrador puede cambiar roles.');
+    }
+  }
+
+  Map<String, dynamic> _roleOverrides(SharedPreferences prefs) {
+    final raw = prefs.getString(_rolesKey);
+    return raw == null ? {} : jsonDecode(raw) as Map<String, dynamic>;
+  }
+
   List<Map<String, dynamic>> _registeredRaw(SharedPreferences prefs) {
     final raw = prefs.getString(_usersKey);
     if (raw == null) return [];
@@ -99,7 +140,11 @@ class DemoAuthBackend implements AuthBackend {
   }
 
   Future<Map<String, ({AppUser user, String password})>> _allUsers(SharedPreferences prefs) async {
-    return {
+    final roles = _roleOverrides(prefs);
+    AppUser withRole(AppUser u) => roles[u.email] == null
+        ? u
+        : AppUser(id: u.id, email: u.email, fullName: u.fullName, role: UserRole.fromDb(roles[u.email] as String));
+    final base = {
       for (final u in demoAccounts) u.email: (user: u, password: demoPassword),
       for (final j in _registeredRaw(prefs))
         j['email'] as String: (
@@ -112,5 +157,6 @@ class DemoAuthBackend implements AuthBackend {
           password: j['password'] as String,
         ),
     };
+    return {for (final e in base.entries) e.key: (user: withRole(e.value.user), password: e.value.password)};
   }
 }

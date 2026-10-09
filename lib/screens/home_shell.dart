@@ -9,12 +9,13 @@ import '../theme.dart';
 import 'admin_screen.dart';
 import 'instructor_screen.dart';
 import 'student_screen.dart';
+import 'users_screen.dart';
 
-enum AppSection { admin, instructor, estudiantes }
+enum AppSection { admin, instructor, estudiantes, usuarios }
 
 /// Secciones visibles para cada rol. El estudiante solo ve su propia ficha.
 List<AppSection> _sectionsFor(UserRole role) => switch (role) {
-      UserRole.admin => [AppSection.admin, AppSection.instructor, AppSection.estudiantes],
+      UserRole.admin => [AppSection.admin, AppSection.instructor, AppSection.estudiantes, AppSection.usuarios],
       UserRole.instructor => [AppSection.instructor, AppSection.estudiantes],
       UserRole.estudiante => const [],
     };
@@ -36,6 +37,13 @@ class _HomeShellState extends State<HomeShell> {
   late AppSection? _section = _sections.isEmpty ? null : _sections.first;
   String? _selectedStudentId;
 
+  @override
+  void initState() {
+    super.initState();
+    // Lo que se ve depende del rol, así que se carga al iniciar sesión.
+    context.read<AppState>().load(widget.user);
+  }
+
   void _goToStudent(String studentId) {
     setState(() {
       _section = AppSection.estudiantes;
@@ -49,6 +57,8 @@ class _HomeShellState extends State<HomeShell> {
         return const AdminScreen();
       case AppSection.instructor:
         return InstructorScreen(onViewStudent: _goToStudent);
+      case AppSection.usuarios:
+        return const UsersScreen();
       case AppSection.estudiantes:
         return StudentScreen(
           selectedStudentId: _selectedStudentId,
@@ -73,6 +83,27 @@ class _HomeShellState extends State<HomeShell> {
     if (appState.loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+    if (appState.error != null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Ficha de Movimiento CAF'),
+          actions: [_AccountMenu(user: widget.user), const SizedBox(width: 12)],
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(appState.error!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton(onPressed: appState.retry, child: const Text('Reintentar')),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -84,9 +115,11 @@ class _HomeShellState extends State<HomeShell> {
             : PreferredSize(
                 preferredSize: const Size.fromHeight(52),
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 12, bottom: 8),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.only(bottom: 8),
+                  // Desplazable para que las secciones quepan en un teléfono.
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: SegmentedButton<AppSection>(
                       segments: [
                         for (final s in _sections)
@@ -96,6 +129,7 @@ class _HomeShellState extends State<HomeShell> {
                               AppSection.admin => 'Administrador',
                               AppSection.instructor => 'Instructor',
                               AppSection.estudiantes => 'Estudiantes',
+                              AppSection.usuarios => 'Usuarios',
                             }),
                           ),
                       ],

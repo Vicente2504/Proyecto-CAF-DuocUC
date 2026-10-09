@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/evaluation.dart';
 import '../models/exercise.dart';
 import '../services/app_state.dart';
+import '../services/data/data_repository.dart';
 import '../theme.dart';
 
 /// Formulario de evaluación: los 10 ejercicios del catálogo, puntaje 0-3
@@ -24,6 +25,8 @@ class _EvaluationFormDialogState extends State<EvaluationFormDialog> {
   final Map<String, int> _scores = {for (final e in kExercises) e.id: 2};
   final Map<String, bool> _pain = {for (final e in kExercises) e.id: false};
   final _notesCtrl = TextEditingController();
+  bool _saving = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -33,7 +36,7 @@ class _EvaluationFormDialogState extends State<EvaluationFormDialog> {
 
   int get _total => _scores.values.fold(0, (a, b) => a + b);
 
-  void _submit() {
+  Future<void> _submit() async {
     final scores = kExercises
         .map((e) => ExerciseScore(
               exerciseId: e.id,
@@ -42,12 +45,25 @@ class _EvaluationFormDialogState extends State<EvaluationFormDialog> {
             ))
         .toList();
 
-    context.read<AppState>().addEvaluation(
-          studentId: widget.studentId,
-          scores: scores,
-          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-        );
-    Navigator.of(context).pop();
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppState>().addEvaluation(
+            studentId: widget.studentId,
+            scores: scores,
+            notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+          );
+      if (mounted) Navigator.of(context).pop();
+    } on DataFailure catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = e.message;
+        });
+      }
+    }
   }
 
   @override
@@ -109,6 +125,11 @@ class _EvaluationFormDialogState extends State<EvaluationFormDialog> {
                 ),
               ),
               const SizedBox(height: 12),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -118,8 +139,8 @@ class _EvaluationFormDialogState extends State<EvaluationFormDialog> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
-                    onPressed: _submit,
-                    child: const Text('Guardar y generar plan'),
+                    onPressed: _saving ? null : _submit,
+                    child: Text(_saving ? 'Guardando…' : 'Guardar y generar plan'),
                   ),
                 ],
               ),

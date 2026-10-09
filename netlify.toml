@@ -1,0 +1,27 @@
+# Despliegue en Netlify (ver PRODUCCION.md).
+#
+# Al conectar el repositorio de GitHub, Netlify descarga Flutter y compila
+# la app con las variables SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY que se
+# configuran en Site configuration → Environment variables.
+# Para subirla a mano: flutter build web --release --dart-define-from-file=env.json
+# y luego npx netlify-cli deploy --prod (usa la carpeta "publish").
+
+[build]
+  publish = "build/web"
+  command = "git clone https://github.com/flutter/flutter.git --depth 1 -b $FLUTTER_VERSION $HOME/flutter && $HOME/flutter/bin/flutter build web --release --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY"
+
+[build.environment]
+  # Misma versión con la que se desarrolla (flutter --version).
+  FLUTTER_VERSION = "3.47.5"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

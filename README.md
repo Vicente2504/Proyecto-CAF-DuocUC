@@ -17,10 +17,14 @@ reevaluar. Hecha en **Flutter Web**, con autenticación en **Supabase**.
 - Progreso histórico por estudiante y alertas de reevaluación (5 semanas).
 - Panel del administrador con métricas del centro.
 
-**Estado:** la autenticación usa Supabase (o un modo demo local si no se
-configura). Los estudiantes y evaluaciones todavía se guardan en el
-navegador (`shared_preferences`); migrarlos a Supabase es el siguiente
-paso.
+**Estado:** la autenticación y los datos (estudiantes, evaluaciones y
+planes) se guardan en **PostgreSQL** a través de Supabase. Si no se
+configura Supabase, la app arranca en un modo demo que guarda todo en el
+navegador.
+
+**Paso a producción:** cómo crear la base en Supabase, publicar en
+Netlify y desarrollar con una base local está en
+[`PRODUCCION.md`](PRODUCCION.md).
 
 **Documentación del proyecto de título:** las evidencias de cada fase
 (grupales e individuales) están en la carpeta [`Fase 1/`](Fase%201/).
@@ -140,19 +144,23 @@ del usuario se muestran distintas secciones:
 
 | Rol | Qué ve |
 |---|---|
-| Administrador | Panel general, vista Instructor y fichas de todos los estudiantes |
+| Administrador | Panel general, vista Instructor, fichas de todos los estudiantes y **Usuarios** (asignar roles) |
 | Instructor | Vista Instructor y fichas de todos los estudiantes |
-| Estudiante | Solo su propia ficha (se vincula por correo con el registro que crea el instructor) |
+| Estudiante | Solo su propia ficha (se crea sola al registrarse; si el instructor ya la había creado con ese correo, se usa esa) |
 
 Quien se registra desde la app queda **siempre como estudiante** y solo
 puede usar un correo institucional (`@duocuc.cl`, `@duoc.cl`,
 `@profesor.duoc.cl`). Los roles de instructor y administrador los asigna
-un administrador en la base de datos.
+un administrador desde la sección **Usuarios** de la app (el usuario ve su
+rol nuevo la próxima vez que inicia sesión). Siempre debe quedar al menos
+un administrador, y nadie puede cambiar su propio rol desde la app.
 
 ### Modo demo (sin configurar nada)
 
 Si ejecutas `flutter run -d chrome` sin credenciales, la app arranca en
-**modo demo** con cuentas de prueba (contraseña `caf12345`):
+**modo demo** con cuentas de prueba (contraseña `caf12345`). Un build de
+producción (`flutter build web`) sin credenciales **no** entra en modo
+demo: muestra un aviso de configuración.
 
 - `admin@duoc.cl` — Administrador
 - `instructor@duoc.cl` — Instructor
@@ -161,12 +169,36 @@ Si ejecutas `flutter run -d chrome` sin credenciales, la app arranca en
 En el login aparecen como botones para entrar con un clic. Este modo es
 solo para desarrollo: guarda las cuentas en el navegador, sin cifrar.
 
-### Conectar Supabase (autenticación real)
+### Desarrollar con Supabase local
+
+Con Docker Desktop abierto:
+
+```
+npx supabase start
+flutter run -d chrome --web-port 5000 --dart-define-from-file=env.local.json
+```
+
+Detalles en [`PRODUCCION.md`](PRODUCCION.md#1-desarrollo-con-supabase-local).
+
+### Conectar Supabase en la nube (autenticación real)
+
+> Para producción sigue [`PRODUCCION.md`](PRODUCCION.md), que sube las
+> migraciones con la CLI (`npx supabase db push`). Los pasos de abajo son la
+> alternativa manual por el SQL Editor.
 
 1. Crea un proyecto gratuito en https://supabase.com.
-2. En el panel: **SQL Editor** → pega el contenido de
-   `supabase/migrations/0001_auth_profiles.sql` → **Run**. Esto crea la
-   tabla `profiles` con los roles y sus reglas de seguridad (RLS).
+2. En el panel: **SQL Editor** → pega y ejecuta (**Run**), en este orden:
+   1. `supabase/migrations/0001_auth_profiles.sql`: tabla `profiles` con
+      los roles y sus reglas de seguridad (RLS).
+   2. `supabase/migrations/0002_students_evaluations.sql`: tablas de
+      ejercicios, estudiantes, evaluaciones, puntajes y plan.
+   3. `supabase/migrations/0003_auto_student_record.sql`: crea
+      automáticamente la ficha de cada estudiante que se registra, para
+      que aparezca en la lista del instructor.
+   4. `supabase/migrations/0004_keep_one_admin.sql`: impide quedarse sin
+      administradores.
+   5. *(Opcional)* `supabase/seed.sql`: los estudiantes y evaluaciones de
+      ejemplo del modo demo.
 3. En **Authentication → URL Configuration**, agrega en *Redirect URLs*
    la dirección donde corre la app (por ejemplo `http://localhost:5000`).
    Es a donde vuelven los enlaces de confirmación de correo y de
@@ -180,15 +212,28 @@ solo para desarrollo: guarda las cuentas en el navegador, sin cifrar.
    flutter run -d chrome --web-port 5000 --dart-define-from-file=env.json
    ```
 6. Regístrate en la app con tu correo y luego, en el SQL Editor,
-   conviértete en administrador:
+   conviértete en administrador (solo el primero se crea así):
    ```sql
    update public.profiles set role = 'admin' where email = 'tu.correo@duocuc.cl';
    ```
-   De la misma forma se asigna `'instructor'` a los instructores.
+   Los demás instructores y administradores se asignan desde la sección
+   **Usuarios** de la app.
 
-> Los datos de estudiantes y evaluaciones todavía se guardan en el
-> navegador (`shared_preferences`); solo la autenticación usa Supabase por
-> ahora. Moverlos a Supabase es el siguiente paso.
+### Base de datos (PostgreSQL)
+
+| Tabla | Contenido |
+|---|---|
+| `profiles` | Usuario, nombre y rol (admin, instructor, estudiante) |
+| `exercises` | Catálogo de los 10 ejercicios evaluados |
+| `students` | Ficha de cada estudiante (se vincula con su cuenta por correo) |
+| `evaluations` | Cada evaluación: estudiante, instructor, fecha y observaciones |
+| `evaluation_scores` | Puntaje 0-3 y marca de dolor por ejercicio |
+| `evaluation_plan_items` | Plan de ejercicios generado en esa evaluación |
+
+Reglas de acceso (RLS): instructores y administradores ven y crean fichas
+y evaluaciones; cada estudiante solo ve su propia ficha; solo los
+administradores pueden eliminar. Las evaluaciones se guardan con la
+función `create_evaluation`, que inserta todo en una sola transacción.
 
 ### Pruebas
 
@@ -215,7 +260,8 @@ Mapa rápido de dónde está cada cosa:
 | Qué quieres cambiar | Archivo |
 |---|---|
 | Los 10 ejercicios evaluados (nombre, qué se observa, prescripción) | `lib/models/exercise.dart` |
-| Estudiantes y evaluaciones de ejemplo (demo) | `lib/services/app_state.dart` (función `_seedDemoData`) |
+| Estudiantes y evaluaciones de ejemplo (demo) | `lib/services/data/local_data_repository.dart` (función `_seedDemoData`) |
+| Lectura y escritura en PostgreSQL (Supabase) | `lib/services/data/supabase_data_repository.dart` |
 | Reglas del plan de correctivos automático | `lib/services/recommendation.dart` |
 | Colores / tema visual | `lib/theme.dart` |
 | Pantalla del instructor (lista de estudiantes) | `lib/screens/instructor_screen.dart` |
@@ -225,7 +271,10 @@ Mapa rápido de dónde está cada cosa:
 | Pantallas de login, registro y recuperación | `lib/screens/auth/` |
 | Lógica de sesión (Supabase y modo demo) | `lib/services/auth/` |
 | Qué secciones ve cada rol | `lib/screens/home_shell.dart` (`_sectionsFor`) |
+| Sección Usuarios (cambiar roles) | `lib/screens/users_screen.dart` |
 | Tabla de perfiles/roles y seguridad en Supabase | `supabase/migrations/0001_auth_profiles.sql` |
+| Tablas de estudiantes y evaluaciones | `supabase/migrations/0002_students_evaluations.sql` |
+| Ficha automática al registrarse | `supabase/migrations/0003_auto_student_record.sql` |
 
 Después de guardar un cambio en VS Code, con la app corriendo (`flutter
 run -d chrome`), vuelve al cmd y presiona `r` para ver el cambio
@@ -233,8 +282,7 @@ reflejado sin reiniciar todo.
 
 ### Para "resetear" los datos de ejemplo
 
-Como todo se guarda en el navegador (no hay base de datos como en la
-versión Next.js), si quieres volver a ver los datos de ejemplo desde
+En el modo demo todo se guarda en el navegador, así que si quieres volver a ver los datos de ejemplo desde
 cero, abre la app en una ventana de incógnito de Chrome, o borra los
 datos del sitio (en Chrome: candadito junto a la dirección → "Configuración
 del sitio" → "Borrar datos").
